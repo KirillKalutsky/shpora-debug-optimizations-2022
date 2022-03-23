@@ -1,11 +1,107 @@
 ﻿using System;
+using System.Collections.Concurrent;
+using System.Threading.Tasks;
 using JPEG.Utilities;
 
 namespace JPEG
 {
 	public class DCT
 	{
-		public static double[,] DCT2D(double[,] input)
+        public static float[,] DCTTransform(float[,] matrix)
+        {
+            var height = matrix.GetLength(0);
+            var width = matrix.GetLength(1);
+            var dct = new float[width, width];
+
+            var partitioner = Partitioner.Create(0, width, width / Environment.ProcessorCount);
+
+            Parallel.ForEach(partitioner, partition =>
+            {
+                ParallelTransform(dct, partition.Item1, partition.Item2, matrix, width, height);
+            });
+
+            return dct;
+        }
+
+        private static void ParallelTransform(float[,] result, int firstIndexStart,
+            int firstIndexEnd, float[,] matrix, int width, int height)
+        {
+            for (var i = firstIndexStart; i < firstIndexEnd; i++)
+            {
+                for (var j = 0; j < height; j++)
+                {
+                    var ci = Math.Sqrt(2) / Math.Sqrt(width);
+                    var cj = Math.Sqrt(2) / Math.Sqrt(height);
+
+                    if (i == 0)
+                        ci = 1 / Math.Sqrt(width);
+                    
+                    if (j == 0)
+                        cj = 1 / Math.Sqrt(height);
+
+                    var sum = 0.0;
+                    for (var k = 0; k < width; k++)
+                    {
+                        for (var l = 0; l < height; l++)
+                        {
+                            sum += matrix[k, l] *
+                                   Math.Cos((2 * k + 1) * i * Math.PI / (2 * width)) *
+                                   Math.Cos((2 * l + 1) * j * Math.PI / (2 * height));
+                        }
+                    }
+                    result[i, j] = (float)(ci * cj * sum);
+                }
+            }
+        }
+
+        public static float[,] IDCTTransform(float[,] matrix)
+        {
+            var height = matrix.GetLength(0);
+            var width = matrix.GetLength(1);
+            var dct = new float[width,width];
+
+            var partitioner = Partitioner.Create(0, height,  height/ Environment.ProcessorCount);
+
+            Parallel.ForEach(partitioner, partition =>
+            {
+                ParallelITransform(dct, partition.Item1, partition.Item2, matrix, height, width);
+            });
+
+            return dct;
+        }
+
+        private static void ParallelITransform(float[,] result, int startIndex,
+            int endIndex, float[,] matrix, int height, int width)
+        {
+            for (var k = startIndex; k < endIndex; k++)
+            {
+                for (var l = 0; l < width; l++)
+                {
+                    var sum = 0.0;
+                    for (var i = 0; i < height; i++)
+                    {
+                        for (var j = 0; j < width; j++)
+                        {
+                            var ci = Math.Sqrt(2) / Math.Sqrt(height);
+                            var cj = Math.Sqrt(2) / Math.Sqrt(width);
+
+                            if (i == 0)
+                                ci = 1 / Math.Sqrt(height);
+
+                            if (j == 0)
+                                cj = 1 / Math.Sqrt(width);
+
+                            sum += ci * cj * matrix[i, j] *
+                                   Math.Cos((2 * k + 1) * i * Math.PI / (2 * height)) *
+                                   Math.Cos((2 * l + 1) * j * Math.PI / (2 * width));
+                        }
+                    }
+                    result[k, l] = (float)sum;
+                }
+            }
+        }
+
+        public static double[,] DCT2D(double[,] input)
 		{
 			var height = input.GetLength(0);
 			var width = input.GetLength(1);
